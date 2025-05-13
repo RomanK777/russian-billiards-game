@@ -1,0 +1,296 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Русский бильярд</title>
+  <link href="https://fonts.googleapis.com/css2?family=Roboto&display=swap" rel="stylesheet" />
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.0.0-beta3/css/all.min.css" />
+  <script src="https://cdn.tailwindcss.com"></script>
+  <style>
+    body, html {
+      height: 100%;
+      margin: 0;
+      font-family: 'Roboto', sans-serif;
+      background-color: #2c3e50;
+    }
+    #game-container {
+      max-width: 900px;
+      margin: 2rem auto;
+      background-color: #1e2a38;
+      border-radius: 0.5rem;
+      box-shadow: 0 0 15px rgba(0,0,0,0.7);
+      padding: 1rem;
+      user-select: none;
+    }
+    #billiard-table {
+      background-color: #0b6623;
+      border: 8px solid #5d3a1a;
+      border-radius: 1rem;
+      position: relative;
+      width: 800px;
+      height: 400px;
+      margin: 0 auto;
+    }
+    canvas {
+      display: block;
+      margin: 0 auto;
+      background-color: transparent;
+    }
+  </style>
+</head>
+<body>
+  <div id="game-container" class="text-white">
+    <h1 class="text-3xl font-bold mb-4 text-center">Русский бильярд</h1>
+    <div id="billiard-table">
+      <canvas id="table-canvas" width="800" height="400"></canvas>
+    </div>
+    <div class="mt-4 text-center">
+      <button id="reset-btn" class="bg-yellow-500 hover:bg-yellow-600 text-white font-bold py-2 px-6 rounded transition">Начать заново</button>
+    </div>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('table-canvas');
+    const ctx = canvas.getContext('2d');
+
+    const tableWidth = canvas.width;
+    const tableHeight = canvas.height;
+
+    // Шары русского бильярда (15 шаров + биток)
+    const ballRadius = 12;
+    const balls = [];
+
+    // Цвета шаров (примерные)
+    const ballColors = [
+      '#ffffff', // биток - белый
+      '#ff0000', '#ff0000', '#ff0000', '#ff0000', '#ff0000', '#ff0000', '#ff0000', '#ff0000', '#ff0000', '#ff0000', '#ff0000', '#ff0000', '#ff0000', '#ff0000', '#ff0000', '#ff0000'
+    ];
+
+    // Инициализация шаров на столе
+    function initBalls() {
+      balls.length = 0;
+      // Биток в центре левого края
+      balls.push({
+        x: 100,
+        y: tableHeight / 2,
+        vx: 0,
+        vy: 0,
+        color: ballColors[0],
+        moving: false,
+      });
+
+      // Расстановка 15 красных шаров в треугольник справа
+      const startX = 600;
+      const startY = tableHeight / 2;
+      let row = 0;
+      let count = 1;
+      for (let i = 0; i < 15; i++) {
+        const rowIndex = Math.floor((Math.sqrt(8 * i + 1) - 1) / 2);
+        const posInRow = i - (rowIndex * (rowIndex + 1)) / 2;
+        const x = startX + rowIndex * (ballRadius * 2 + 1);
+        const y = startY + (posInRow * 2 - rowIndex) * (ballRadius + 1);
+        balls.push({
+          x,
+          y,
+          vx: 0,
+          vy: 0,
+          color: ballColors[1],
+          moving: false,
+        });
+      }
+    }
+
+    // Отрисовка стола
+    function drawTable() {
+      ctx.clearRect(0, 0, tableWidth, tableHeight);
+      // Стол - зеленый фон уже задан в CSS
+      // Нарисовать лузы (6 штук)
+      const pocketRadius = 20;
+      const pockets = [
+        { x: 0, y: 0 },
+        { x: tableWidth / 2, y: 0 },
+        { x: tableWidth, y: 0 },
+        { x: 0, y: tableHeight },
+        { x: tableWidth / 2, y: tableHeight },
+        { x: tableWidth, y: tableHeight },
+      ];
+      ctx.fillStyle = '#000000';
+      pockets.forEach(pocket => {
+        ctx.beginPath();
+        ctx.arc(pocket.x, pocket.y, pocketRadius, 0, Math.PI * 2);
+        ctx.fill();
+      });
+    }
+
+    // Отрисовка шаров
+    function drawBalls() {
+      balls.forEach(ball => {
+        ctx.beginPath();
+        ctx.fillStyle = ball.color;
+        ctx.shadowColor = 'rgba(0,0,0,0.7)';
+        ctx.shadowBlur = 5;
+        ctx.arc(ball.x, ball.y, ballRadius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.shadowBlur = 0;
+        ctx.strokeStyle = '#333';
+        ctx.stroke();
+      });
+    }
+
+    // Обновление позиции шаров с учетом скорости и столкновений со стенами
+    function updateBalls() {
+      balls.forEach(ball => {
+        if (!ball.moving) return;
+        ball.x += ball.vx;
+        ball.y += ball.vy;
+
+        // Трение
+        ball.vx *= 0.98;
+        ball.vy *= 0.98;
+
+        if (Math.abs(ball.vx) < 0.01) ball.vx = 0;
+        if (Math.abs(ball.vy) < 0.01) ball.vy = 0;
+        if (ball.vx === 0 && ball.vy === 0) ball.moving = false;
+
+        // Стол - столкновение со стенами
+        if (ball.x - ballRadius < 0) {
+          ball.x = ballRadius;
+          ball.vx = -ball.vx * 0.8;
+        }
+        if (ball.x + ballRadius > tableWidth) {
+          ball.x = tableWidth - ballRadius;
+          ball.vx = -ball.vx * 0.8;
+        }
+        if (ball.y - ballRadius < 0) {
+          ball.y = ballRadius;
+          ball.vy = -ball.vy * 0.8;
+        }
+        if (ball.y + ballRadius > tableHeight) {
+          ball.y = tableHeight - ballRadius;
+          ball.vy = -ball.vy * 0.8;
+        }
+      });
+    }
+
+    // Обработка столкновений между шарами
+    function handleCollisions() {
+      for (let i = 0; i < balls.length; i++) {
+        for (let j = i + 1; j < balls.length; j++) {
+          const b1 = balls[i];
+          const b2 = balls[j];
+          const dx = b2.x - b1.x;
+          const dy = b2.y - b1.y;
+          const dist = Math.sqrt(dx * dx + dy * dy);
+          if (dist < ballRadius * 2) {
+            // Простое столкновение - обмен скоростями по осям
+            const angle = Math.atan2(dy, dx);
+            const sin = Math.sin(angle);
+            const cos = Math.cos(angle);
+
+            // Поворот системы координат
+            const v1x = b1.vx * cos + b1.vy * sin;
+            const v1y = b1.vy * cos - b1.vx * sin;
+            const v2x = b2.vx * cos + b2.vy * sin;
+            const v2y = b2.vy * cos - b2.vx * sin;
+
+            // Обмен скоростями по оси x
+            const v1xAfter = v2x;
+            const v2xAfter = v1x;
+
+            // Обратный поворот
+            b1.vx = v1xAfter * cos - v1y * sin;
+            b1.vy = v1y * cos + v1xAfter * sin;
+            b2.vx = v2xAfter * cos - v2y * sin;
+            b2.vy = v2y * cos + v2xAfter * sin;
+
+            // Коррекция позиции, чтобы шары не слипались
+            const overlap = ballRadius * 2 - dist;
+            const correctionX = overlap * cos / 2;
+            const correctionY = overlap * sin / 2;
+            b1.x -= correctionX;
+            b1.y -= correctionY;
+            b2.x += correctionX;
+            b2.y += correctionY;
+          }
+        }
+      }
+    }
+
+    // Управление ударом
+    let aiming = false;
+    let aimStart = null;
+    let aimEnd = null;
+
+    canvas.addEventListener('mousedown', (e) => {
+      const rect = canvas.getBoundingClientRect();
+      const mouseX = e.clientX - rect.left;
+      const mouseY = e.clientY - rect.top;
+      const cueBall = balls[0];
+      const dx = mouseX - cueBall.x;
+      const dy = mouseY - cueBall.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist <= ballRadius) {
+        aiming = true;
+        aimStart = { x: mouseX, y: mouseY };
+        aimEnd = null;
+      }
+    });
+
+    canvas.addEventListener('mousemove', (e) => {
+      if (!aiming) return;
+      const rect = canvas.getBoundingClientRect();
+      aimEnd = {
+        x: e.clientX - rect.left,
+        y: e.clientY - rect.top,
+      };
+    });
+
+    canvas.addEventListener('mouseup', (e) => {
+      if (!aiming || !aimEnd) return;
+      const cueBall = balls[0];
+      const dx = aimEnd.x - cueBall.x;
+      const dy = aimEnd.y - cueBall.y;
+      const force = Math.min(Math.sqrt(dx * dx + dy * dy), 100) / 10;
+      const angle = Math.atan2(dy, dx);
+      cueBall.vx = force * Math.cos(angle);
+      cueBall.vy = force * Math.sin(angle);
+      cueBall.moving = true;
+      aiming = false;
+      aimStart = null;
+      aimEnd = null;
+    });
+
+    // Отрисовка линии прицеливания
+    function drawAimLine() {
+      if (!aiming || !aimEnd) return;
+      const cueBall = balls[0];
+      ctx.beginPath();
+      ctx.strokeStyle = 'yellow';
+      ctx.lineWidth = 2;
+      ctx.moveTo(cueBall.x, cueBall.y);
+      ctx.lineTo(aimEnd.x, aimEnd.y);
+      ctx.stroke();
+    }
+
+    // Основной игровой цикл
+    function gameLoop() {
+      drawTable();
+      updateBalls();
+      handleCollisions();
+      drawBalls();
+      drawAimLine();
+      requestAnimationFrame(gameLoop);
+    }
+
+    // Сброс игры
+    document.getElementById('reset-btn').addEventListener('click', () => {
+      initBalls();
+    });
+
+    // Инициализация и запуск
+    initBalls();
+    gameLoop();
+  </script>
+</body>
+</html>
